@@ -1,0 +1,32 @@
+name = "cf-kefu-chat"
+main = "src/index.js"
+compatibility_date = "2025-04-01"
+workers_dev = true
+
+# 变量（非机密）
+[vars]
+SHOP_NAME = "在线客服"
+MAX_IMAGE_MB = "5"
+RECALL_WINDOW_SEC = "120"
+AGENT_NAME = "客服小蒙"
+
+[observability]
+enabled = true
+
+# D1 数据库：先执行 wrangler d1 create cf_kefu 拿到 database_id 填到这里
+[[d1_databases]]
+binding = "DB"
+database_name = "cf_kefu"
+database_id = "75089c2f-db3a-4243-8d32-7349e0970c01"
+migrations_dir = "migrations"
+
+# R2 对象存储：先执行 wrangler r2 bucket create cf-kefu-files
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "cf-kefu-files"
+
+# 静态资源（public 目录）：Worker 优先接管请求，再回落到静态资源
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
