@@ -13,9 +13,6 @@
  *   GET  /api/conversations           客服侧：会话列表 + 未读数
  *   POST /api/login                   客服侧：校验口令
  *   GET  /api/health                  健康检查
- *
- * ✅ 后台访问地址： /agent.html  或者简写 /agent
- * ✅ 后台密码环境变量： AGENT_TOKEN
  */
 
 const JSON_HEADERS = {
@@ -50,7 +47,6 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
-    // 所有 /api 开头接口交给 worker
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       try {
         return await handleApi(request, env, url);
@@ -60,7 +56,6 @@ export default {
       }
     }
 
-    // 其余全部走静态资源（包含 /agent /agent.html 后台页面）
     return serveAsset(request, env, url);
   },
 };
@@ -74,7 +69,6 @@ async function serveAsset(request, env, url) {
 
   let path = url.pathname;
   if (path === '/' || path === '') path = '/index.html';
-  // 后台：访问 /agent 自动映射到后台页面 agent.html
   else if (path === '/agent' || path === '/agent/') path = '/agent.html';
 
   const target = new Request(new URL(path + url.search, url.origin).toString(), request);
@@ -192,42 +186,25 @@ const mapConv = (row) => ({
   unread: row.unread || 0,
 });
 
-await env.DB.prepare(
-  'INSERT INTO conversations (id, visitor_token, visitor_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
-)
-  .bind(id, newToken, visitorName, t, t)
-  .run();
+async function handleSession(request, env) {
+  const body = await safeBody(request);
+  const token = typeof body.token === 'string' ? body.token.trim() : '';
+  const name = (typeof body.name === 'string' ? body.name : '').trim().slice(0, 24);
 
-// ========== 粘贴下面整块在这里 ==========
-let preview = '';
-const welcomeText = (env.WELCOME_MESSAGE || '您好！欢迎来到小旗搭建在线客服，请问有什么可以帮您？').trim();
-if (welcomeText) {
-  try {
-    const agentName = env.AGENT_NAME || '客服';
-    await env.DB.prepare(
-      `INSERT INTO messages (conv_id, sender, sender_name, type, body, created_at, updated_at)
-       VALUES (?, 'agent', ?, 'text', ?, ?, ?)`
-    )
-      .bind(id, agentName, welcomeText, t, t)
-      .run();
-    preview = `客服: ${welcomeText.slice(0, 40)}`;
-    await env.DB.prepare(
-      'UPDATE conversations SET last_message_at = ?, last_preview = ?, updated_at = ? WHERE id = ?'
-    )
-      .bind(t, preview, t, id)
-      .run();
-  } catch (e) {
-    console.error('welcome message insert failed', e);
+  if (token) {
+    const conv = await env.DB.prepare('SELECT * FROM conversations WHERE visitor_token = ?')
+      .bind(token)
+      .first();
+    if (conv) {
+      if (name && name !== conv.visitor_name) {
+        await env.DB.prepare('UPDATE conversations SET visitor_name = ?, updated_at = ? WHERE id = ?')
+          .bind(name, now(), conv.id)
+          .run();
+        conv.visitor_name = name;
+      }
+      return json({ token, conv: mapConv(conv), shop: env.SHOP_NAME || '在线客服' });
+    }
   }
-}
-// ======================================
-
-return json({
-  token: newToken,
-  conv: { id, name: visitorName, preview, lastMessageAt: t, createdAt: t, unread: 0 },
-  shop: env.SHOP_NAME || '在线客服',
-});
-
 
   const newToken = token || uid(40);
   const id = uid(16);
@@ -240,9 +217,32 @@ return json({
     .bind(id, newToken, visitorName, t, t)
     .run();
 
+  // 新会话自动发送一条客服欢迎语（可在环境变量 WELCOME_MESSAGE 中自定义，留空则不发送）
+  // 写入失败只记录日志，不阻断会话创建，访客仍可正常聊天
+  const welcomeText = (env.WELCOME_MESSAGE || '您好！欢迎来到小旗搭建在线客服，请问有什么可以帮您？').trim();
+  let preview = '';
+  if (welcomeText) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO messages (conv_id, sender, sender_name, type, body, created_at, updated_at)
+         VALUES (?, 'agent', ?, 'text', ?, ?, ?)`
+      )
+        .bind(id, env.AGENT_NAME || '客服', welcomeText, t, t)
+        .run();
+      preview = `客服: ${welcomeText.slice(0, 40)}`;
+      await env.DB.prepare(
+        'UPDATE conversations SET last_message_at = ?, last_preview = ?, updated_at = ? WHERE id = ?'
+      )
+        .bind(t, preview, t, id)
+        .run();
+    } catch (e) {
+      console.error('welcome message insert failed', e);
+    }
+  }
+
   return json({
     token: newToken,
-    conv: { id, name: visitorName, preview: '', lastMessageAt: t, createdAt: t, unread: 0 },
+    conv: { id, name: visitorName, preview, lastMessageAt: t, createdAt: t, unread: 0 },
     shop: env.SHOP_NAME || '在线客服',
   });
 }
