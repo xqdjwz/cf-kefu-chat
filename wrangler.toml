@@ -5,10 +5,11 @@ workers_dev = true
 
 # 变量（非机密）
 [vars]
-SHOP_NAME = "客服-小旗"
+SHOP_NAME = "在线客服"
 MAX_IMAGE_MB = "5"
 RECALL_WINDOW_SEC = "120"
 AGENT_NAME = "客服小旗"
+WELCOME_MESSAGE = "您好！欢迎来到小旗搭建在线客服，请问有什么可以帮您？"
 
 [observability]
 enabled = true
@@ -29,4 +30,3 @@ bucket_name = "cf-kefu-files"
 [assets]
 directory = "./public"
 binding = "ASSETS"
-
