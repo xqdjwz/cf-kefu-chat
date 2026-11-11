@@ -1,5 +1,3 @@
-import { D1Database } from '@cloudflare/workers-types';
-
 function uid(len = 16) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   let s = '';
@@ -72,22 +70,23 @@ async function handleSession(request, env) {
   });
 }
 
-// ==========【新增：修改访客备注接口】==========
+// 【新增】修改访客备注接口 PATCH /api/conv/:id/rename
 async function handleRenameConv(request, env, convId) {
   const auth = request.headers.get('authorization');
+  // 校验客服令牌，防止访客乱改
   if (auth !== `Bearer ${env.AGENT_TOKEN}`) {
     return json({ ok: false, msg: '权限不足' }, 403);
   }
   const body = await safeBody(request);
   const newName = (body.name || '').trim();
-  if (!newName) return json({ ok: false, msg: '名称不能为空' }, 400);
+  if (!newName) return json({ ok: false, msg: '备注不能为空' }, 400);
 
   const res = await env.DB.prepare(
     'UPDATE conversations SET visitor_name = ?, updated_at = ? WHERE id = ?'
   ).bind(newName, now(), convId).run();
 
   if (res.meta.changes === 0) {
-    return json({ ok: false, msg: '会话不存在' }, 404);
+    return json({ ok: false, msg: '找不到这条会话' }, 404);
   }
   return json({ ok: true, name: newName });
 }
@@ -97,13 +96,16 @@ async function route(request, env) {
   const m = request.method;
   const p = url.pathname;
 
-  // 修改备注 PATCH /api/conv/:id/rename
+  // 路由匹配：修改备注
   const renameMatch = p.match(/^\/api\/conv\/([a-z0-9]+)\/rename$/);
   if (renameMatch && m === 'PATCH') {
     return handleRenameConv(request, env, renameMatch[1]);
   }
 
   if (p === '/api/session' && m === 'POST') return handleSession(request, env);
+
+  // 你原有其他接口（拉会话列表、发消息、读取消息）全部放在这里，不要删掉原有路由！
+  // 👉 重点提醒：如果你还有 getConvList / sendMessage 等接口，保留！上面只新增 rename 路由
 
   return json({ msg: 'not found' }, 404);
 }
