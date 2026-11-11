@@ -17,7 +17,7 @@ enabled = true
 [[d1_databases]]
 binding = "DB"
 database_name = "cf_kefu"
-database_id = "75089c2f-db3a-4243-8d32-7349e0970c01"
+database_id = "18f67756-6685-40f5-854d-1c4d43bba434"
 migrations_dir = "migrations"
 
 # R2 对象存储：先执行 wrangler r2 bucket create cf-kefu-files
