@@ -200,7 +200,7 @@ await env.DB.prepare(
 
 // ========== 粘贴下面整块在这里 ==========
 let preview = '';
-const welcomeText = (env.WELCOME_MESSAGE || '您好！欢迎来到在线客服，请问有什么可以帮您？').trim();
+const welcomeText = (env.WELCOME_MESSAGE || '您好！欢迎来到小旗搭建在线客服，请问有什么可以帮您？').trim();
 if (welcomeText) {
   try {
     const agentName = env.AGENT_NAME || '客服';
