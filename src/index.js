@@ -192,25 +192,42 @@ const mapConv = (row) => ({
   unread: row.unread || 0,
 });
 
-async function handleSession(request, env) {
-  const body = await safeBody(request);
-  const token = typeof body.token === 'string' ? body.token.trim() : '';
-  const name = (typeof body.name === 'string' ? body.name : '').trim().slice(0, 24);
+await env.DB.prepare(
+  'INSERT INTO conversations (id, visitor_token, visitor_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)'
+)
+  .bind(id, newToken, visitorName, t, t)
+  .run();
 
-  if (token) {
-    const conv = await env.DB.prepare('SELECT * FROM conversations WHERE visitor_token = ?')
-      .bind(token)
-      .first();
-    if (conv) {
-      if (name && name !== conv.visitor_name) {
-        await env.DB.prepare('UPDATE conversations SET visitor_name = ?, updated_at = ? WHERE id = ?')
-          .bind(name, now(), conv.id)
-          .run();
-        conv.visitor_name = name;
-      }
-      return json({ token, conv: mapConv(conv), shop: env.SHOP_NAME || '在线客服' });
-    }
+// ========== 粘贴下面整块在这里 ==========
+let preview = '';
+const welcomeText = (env.WELCOME_MESSAGE || '您好！欢迎来到在线客服，请问有什么可以帮您？').trim();
+if (welcomeText) {
+  try {
+    const agentName = env.AGENT_NAME || '客服';
+    await env.DB.prepare(
+      `INSERT INTO messages (conv_id, sender, sender_name, type, body, created_at, updated_at)
+       VALUES (?, 'agent', ?, 'text', ?, ?, ?)`
+    )
+      .bind(id, agentName, welcomeText, t, t)
+      .run();
+    preview = `客服: ${welcomeText.slice(0, 40)}`;
+    await env.DB.prepare(
+      'UPDATE conversations SET last_message_at = ?, last_preview = ?, updated_at = ? WHERE id = ?'
+    )
+      .bind(t, preview, t, id)
+      .run();
+  } catch (e) {
+    console.error('welcome message insert failed', e);
   }
+}
+// ======================================
+
+return json({
+  token: newToken,
+  conv: { id, name: visitorName, preview, lastMessageAt: t, createdAt: t, unread: 0 },
+  shop: env.SHOP_NAME || '在线客服',
+});
+
 
   const newToken = token || uid(40);
   const id = uid(16);
